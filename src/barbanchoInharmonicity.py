@@ -43,8 +43,7 @@ def innerComputeBarbanchoInharm(differences: list, f0: float) -> float:
     beta=2*a/(f0+b) # Barbancho et al. (17)
     return beta
 
-def partialTrack(fft, f0: float, N: int, winSize: float, 
-                betaFunc=innerComputeBarbanchoInharm,
+def partialTrack(fft, f0: float, N: int, winSize: float,
                 initB = 1) -> list:
     """Function that tracks the partial in the given note instace.
     Works by invoking partialDetect and innerComputeBarbanchoInharm for adjusting 
@@ -66,9 +65,8 @@ def partialTrack(fft, f0: float, N: int, winSize: float,
         rStart, rEnd = dLimits(pFreq, winSize)
         partials.append(partialDetect(fft, rStart, rEnd))
         differences.append(computeDiff(pFreq, f0, pOrder))
-        beta = betaFunc(differences, f0)
+        beta = innerComputeBarbanchoInharm(differences, f0)
     return partials, differences
-
 
 
 def partialDetect(fft, rStart: float, rEnd: float) -> float:
@@ -88,7 +86,6 @@ def partialDetect(fft, rStart: float, rEnd: float) -> float:
                 peakAmp, peakFreq = t
         return peakFreq
     return highPeak(fft, rStart, rEnd)
-
 
 
 def computeBarbanchoInharm(fftAmps, fftFreqs, sr, f0, winSize, N, *kwargs):
