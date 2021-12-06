@@ -4,6 +4,8 @@ from typing import List
 import numpy as np
 from scipy.optimize import least_squares
 from math import sqrt
+from itertools import combinations
+import copy
 
 class Fft:
     def __init__(self, fftAmps, fftFreqs, sr):
@@ -43,21 +45,22 @@ def innerComputeBarbanchoInharm(differences: list, f0: float) -> float:
     beta=2*a/(f0+b) # Barbancho et al. (17)
     return beta
 
+def computeDiff(pFreq, f0, pOrder):
+        """compute and return a tuple with the difference between
+        measured and theoretical partial and the associated order"""
+        return (pFreq - f0*pOrder, pOrder)
+def dLimits(pFreq: float, winSize: float) -> tuple:
+    """function computing the limits used for partial detection."""
+    rStart = pFreq - winSize/2
+    rEnd = pFreq + winSize/2
+    return rStart, rEnd
+
 def partialTrack(fft, f0: float, N: int, winSize: float,
                 initB = 1) -> list:
     """Function that tracks the partial in the given note instace.
     Works by invoking partialDetect and innerComputeBarbanchoInharm for adjusting 
     partialDetect window according to inharmonicity estimation so far"""
-    def computeDiff(pFreq, f0, pOrder):
-        """compute and return a tuple with the difference between
-        measured and theoretical partial and the associated order"""
-        return (pFreq - f0*pOrder, pOrder)
-    def dLimits(pFreq: float, winSize: float) -> tuple:
-        """function computing the limits used for partial detection."""
-        rStart = pFreq - winSize/2
-        rEnd = pFreq + winSize/2
-        return rStart, rEnd
-
+    
     partials, differences = [], []
     beta = initB
     for pOrder in range(1, N + 1):
@@ -87,7 +90,36 @@ def partialDetect(fft, rStart: float, rEnd: float) -> float:
         return peakFreq
     return highPeak(fft, rStart, rEnd)
 
+def elegibilityCheck(lims, eligibles: list) -> bool:
+    combs = combinations(lims, 2)
+    for comb in combs:
+        x, y = comb
+        if max(x[0], y[0]) < min(x[1], y[1]) + 1: # intersection
+            eligibles.remove(x[2])
+            eligibles.remove(y[2])
+    return eligibles
 
+def multiPartialTrack(fft, f0l: list, N: int, winSize: float,
+                initB = 1) -> list:
+    """needs work. Not robust at all, not implemented correctly 
+    for the beta and how it passes through to every iteration"""
+    partials, differences = [], []
+    beta = initB
+    for pOrder in range(1, N + 1):
+        lims = []
+        eligible = copy.deepcopy(f0l)
+        for f0 in f0l:
+            pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
+            lims.append(dLimits(pFreq, winSize))
+            eligible = elegibilityCheck(lims, eligible)
+            for f0 in eligible:
+                pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
+                rStart, rEnd = dLimits(pFreq, winSize)
+                partials.append(partialDetect(fft, rStart, rEnd))
+                differences.append(computeDiff(pFreq, f0, pOrder))
+                beta = innerComputeBarbanchoInharm(differences, f0)
+    return partials, differences
+    
 def computeBarbanchoInharm(fftAmps, fftFreqs, sr, f0, winSize, N, *kwargs):
     """function that performs partial tracking and returns associated
     inharmonicity coefficient as described in paper.
