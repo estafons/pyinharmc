@@ -3,7 +3,7 @@
 from typing import List
 import numpy as np
 from scipy.optimize import least_squares
-
+from math import sqrt
 
 class fft:
     def __init__(self, fftAmps, fftFreqs, sr):
@@ -17,12 +17,28 @@ def inharmonicomp(i: int) -> int:
     i = i + 2
     return i
 
-def partialTrack(fft: tuple, f0: float) -> list:
+def dLimits(pFreq: float, winSize: float) -> tuple:
+    """function computing the limits used for partial detection."""
+    rStart = pFreq - winSize/2
+    rEnd = pFreq + winSize/2
+    return rStart, rEnd
+
+def partialTrack(fft: tuple, f0: float, N: int, winSize: float, initB = 1) -> list:
     """Function that tracks the partial in the given note instace.
     Works by invoking partialDetect and computeInharm for adjusting 
     partialDetect window according to inharmonicity estimation so far"""
-    pass
-
+    def computeDiff(pFreq, f0, pOrder):
+        return (pFreq - f0*pOrder, pOrder)
+    partials, differences = [], []
+    beta = initB
+    for pOrder in range(1, N + 1):
+        pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
+        rStart, rEnd = dLimits(pFreq, winSize)
+        partials.append(partialDetect(fft, rStart, rEnd))
+        differences.append(computeDiff(pFreq, f0, pOrder))
+        beta = computeInharm(differences, f0)
+    return partials, differences
+    
 def castToBin(sr, sz, freq):
     return sr*freq/sz
 
