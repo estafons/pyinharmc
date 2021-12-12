@@ -53,7 +53,7 @@ def dLimits(pFreq: float, winSize: float) -> tuple:
     """function computing the limits used for partial detection."""
     rStart = pFreq - winSize/2
     rEnd = pFreq + winSize/2
-    return rStart, rEnd
+    return rStart, rEnd, pFreq
 
 def partialTrack(fft, f0: float, N: int, winSize: float,
                 initB = 1) -> list:
@@ -66,8 +66,9 @@ def partialTrack(fft, f0: float, N: int, winSize: float,
     for pOrder in range(1, N + 1):
         pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
         rStart, rEnd = dLimits(pFreq, winSize)
-        partials.append(partialDetect(fft, rStart, rEnd))
-        differences.append(computeDiff(pFreq, f0, pOrder))
+        partialF = partialDetect(fft, rStart, rEnd)
+        partials.append(partialF)
+        differences.append(computeDiff(partialF, f0, pOrder))
         beta = innerComputeBarbanchoInharm(differences, f0)
     return partials, differences
 
@@ -90,8 +91,15 @@ def partialDetect(fft, rStart: float, rEnd: float) -> float:
         return peakFreq
     return highPeak(fft, rStart, rEnd)
 
-def elegibilityCheck(lims, eligibles: list) -> bool:
+
+
+def elegibilityCheck(f0l, pOrder, winSize, betas) -> list:
+    f0bs = zip(f0l, betas)
+    fks = [pOrder*f0*sqrt(1 + beta*pOrder**2) for (f0, beta) in f0bs]
+    eligibles = zip(copy.deepcopy(fks), f0l)
+    lims = [dLimits(fk, winSize) for fk in fks]
     combs = combinations(lims, 2)
+    #pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
     for comb in combs:
         x, y = comb
         if max(x[0], y[0]) < min(x[1], y[1]) + 1: # intersection
@@ -99,26 +107,31 @@ def elegibilityCheck(lims, eligibles: list) -> bool:
             eligibles.remove(y[2])
     return eligibles
 
-def multiPartialTrack(fft, f0l: list, N: int, winSize: float,
-                initB = 1) -> list:
+def multiPartialTrack(fft, f0l: list, N: int, winSize: float) -> list:
     """needs work. Not robust at all, not implemented correctly 
     for the beta and how it passes through to every iteration"""
-    partials, differences = [], []
-    beta = initB
+    differences = {}
+    partials = {}
+    betas = {}
+    for f0 in f0l:
+        differences[f0] = []
+        partials[f0] = []
+        betas[f0] = []
+    # if initB is not None:
+    #     betas = copy.deepcopy(initB)
+    # else:
+    #     betas = []
     for pOrder in range(1, N + 1):
-        lims = []
-        eligible = copy.deepcopy(f0l)
-        for f0 in f0l:
-            pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
-            lims.append(dLimits(pFreq, winSize))
-            eligible = elegibilityCheck(lims, eligible)
-            for f0 in eligible:
-                pFreq = sqrt(1 + beta*pOrder**2)*pOrder*f0
-                rStart, rEnd = dLimits(pFreq, winSize)
-                partials.append(partialDetect(fft, rStart, rEnd))
-                differences.append(computeDiff(pFreq, f0, pOrder))
-                beta = innerComputeBarbanchoInharm(differences, f0)
-    return partials, differences
+        eligibles = elegibilityCheck(f0l, pOrder, winSize, betas)
+        for eligible in eligibles:
+            pFreq, f0 = eligible
+            rStart, rEnd, _ = dLimits(pFreq, winSize)
+            partialF = partialDetect(fft, rStart, rEnd)
+            partials[f0].append(partialF)
+            differences[f0].append(computeDiff(partialF, f0, pOrder))
+            beta = innerComputeBarbanchoInharm(differences, f0)
+            betas[f0].append(beta)
+    return partials, differences, betas
     
 def computeBarbanchoInharm(fftAmps, fftFreqs, sr, f0, winSize, N, *kwargs):
     """function that performs partial tracking and returns associated
